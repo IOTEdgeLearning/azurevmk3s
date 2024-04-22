@@ -2,12 +2,23 @@ locals {
   general_name = var.general.deployment_name
   location     = var.general.location
   tags         = var.general.general_tags
+  acrname      = trim(var.general.deployment_name, "-dev")
 }
 
 resource "azurerm_resource_group" "dev_group" {
   name     = local.general_name
   location = local.location
   tags     = local.tags
+}
+
+resource "azurerm_container_registry" "default" {
+  for_each = var.linux_vm
+
+  name                = "acr${local.acrname}"
+  resource_group_name = azurerm_resource_group.dev_group.name
+  location            = azurerm_resource_group.dev_group.location
+  sku                 = "Standard"
+  admin_enabled       = true
 }
 
 resource "azurerm_linux_virtual_machine" "linux_vm" {
@@ -61,8 +72,11 @@ resource "null_resource" "k3s_setup" {
 
   provisioner "remote-exec" {
     inline = [
+      "ls -la /tmp/bash/",
       "chmod +x /tmp/bash/k3s_install.sh",
-      "/tmp/bash/k3s_install.sh ${azurerm_linux_virtual_machine.linux_vm[each.key].public_ip_address}"
+      "/tmp/bash/k3s_install.sh",
+      "chmod +x /tmp/bash/provision_acr_access.sh"
+      # "/tmp/bash/provision_acr_access -u ${azurerm_container_registry.default[each.key].admin_username} -s ${azurerm_container_registry.default[each.key].login_server} -p ${azurerm_container_registry.default[each.key].admin_password}"
     ]
   }
 
